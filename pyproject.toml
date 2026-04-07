@@ -11,8 +11,12 @@ dependencies = [
     "pandas",
     "torch",
     "transformers",
-    "Pillow"
+    "Pillow",
+    "openenv>=0.2.0"
 ]
+
+[project.scripts]
+server = "server:app"
 
 [tool.openenv]
 entrypoint = "server:app"
