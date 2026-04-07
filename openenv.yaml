@@ -1,0 +1,305 @@
+name: Deepfake Spread Tracker
+description: AI agent tracks and mitigates deepfake spread across social media platforms
+
+version: "1.0"
+author: Hackathon Team
+created: 2026-04-03
+
+# Environment metadata
+environment_type: "Simulation"
+domain: "Content Moderation / Misinformation Detection"
+observation_type: "Continuous"
+action_type: "Discrete"
+
+# Task definitions
+tasks:
+  - name: easy
+    description: "5 obvious deepfakes, slow spread (100-200 views/step)"
+    difficulty: beginner
+    posts: 5
+    spread_rate: "slow (100-200 views/step)"
+    detection_difficulty: 0.0
+    max_steps: 50
+    expected_baseline_score: 0.70
+
+  - name: medium
+    description: "20 posts with moderate deepfake signals, multi-platform (300-600 views/step)"
+    difficulty: intermediate
+    posts: 20
+    spread_rate: "medium (300-600 views/step)"
+    detection_difficulty: 0.5
+    max_steps: 30
+    expected_baseline_score: 0.53
+
+  - name: hard
+    description: "100 subtle deepfakes, rapid viral spread (600-1500 views/step)"
+    difficulty: advanced
+    posts: 100
+    spread_rate: "fast (600-1500 views/step)"
+    detection_difficulty: 1.0
+    max_steps: 15
+    expected_baseline_score: 0.24
+
+# Difficulty levels
+difficulty_levels:
+  easy:
+    num_posts: 5
+    initial_deepfake_probability_range: [0.5, 0.7]
+    spread_rate_min: 100
+    spread_rate_max: 200
+    detection_difficulty: 0.0
+    description: "Obvious deepfakes with slow spread"
+
+  medium:
+    num_posts: 20
+    initial_deepfake_probability_range: [0.3, 0.5]
+    spread_rate_min: 300
+    spread_rate_max: 600
+    detection_difficulty: 0.5
+    description: "Moderate deepfake signals with medium spread"
+
+  hard:
+    num_posts: 100
+    initial_deepfake_probability_range: [0.1, 0.3]
+    spread_rate_min: 600
+    spread_rate_max: 1500
+    detection_difficulty: 1.0
+    description: "Subtle deepfakes with rapid viral spread"
+
+# Observation space
+observation_space:
+  type: "Continuous"
+  fields:
+    - name: post_id
+      type: "string"
+      description: "Unique identifier for the post"
+
+    - name: platform
+      type: "categorical"
+      values: ["twitter", "instagram", "whatsapp"]
+      description: "Social media platform where post originated"
+
+    - name: views
+      type: "integer"
+      range: [0, 1000000]
+      description: "Current number of post views"
+
+    - name: shares
+      type: "integer"
+      range: [0, 500000]
+      description: "Current number of post shares"
+
+    - name: deepfake_probability
+      type: "float"
+      range: [0.0, 1.0]
+      description: "AI-estimated probability that post contains deepfake content"
+
+    - name: trust_score
+      type: "float"
+      range: [0.0, 1.0]
+      description: "Community trust level in post authenticity (decreases over time)"
+
+    - name: is_flagged
+      type: "boolean"
+      description: "Whether the post has been flagged as deepfake (permanent)"
+
+# Action space
+action_space:
+  type: "Discrete"
+  num_actions: 4
+  actions:
+    - name: FLAG_POST
+      code: 0
+      description: "Permanently flag post as deepfake (removes from circulation)"
+      effect: "Post is marked is_flagged=True, stops spreading"
+      reward_context: "Positive reward if probability > 0.5, penalty if false flag"
+
+    - name: REDUCE_VISIBILITY
+      code: 1
+      description: "Reduce post visibility by 30% (slow spread)"
+      effect: "Multiply views increase by 0.7 for next step"
+      reward_context: "Reward if targeting likely deepfakes (probability > 0.5)"
+
+    - name: TRACE_SOURCE
+      code: 2
+      description: "Initiate source investigation (gather intelligence)"
+      effect: "No immediate effect; useful for agent information gathering"
+      reward_context: "Reward if deepfake_probability > 0.6"
+
+    - name: DO_NOTHING
+      code: 3
+      description: "Take no action on post (allows natural spread)"
+      effect: "Post spreads normally; post continues distributing"
+      reward_context: "Penalty if probability > 0.7 (inaction on obvious deepfake)"
+
+# Reward function
+reward_function:
+  type: "Continuous"
+  range: [0.0, 1.0]
+  description: "Normalized reward signal for agent learning"
+  
+  rules:
+    - trigger: "FLAG_POST when deepfake_probability > 0.5"
+      reward: +0.5
+      description: "Correct deepfake detection"
+
+    - trigger: "Early detection (views < 5000)"
+      reward: +0.3
+      bonus: true
+      description: "Bonus for catching deepfakes before viral spread"
+
+    - trigger: "FLAG_POST when deepfake_probability <= 0.5"
+      reward: -0.2
+      description: "False flag penalty"
+
+    - trigger: "REDUCE_VISIBILITY on suspected deepfake"
+      reward: +0.2
+      description: "Partial reward for reducing visibility"
+
+    - trigger: "TRACE_SOURCE when deepfake_probability > 0.6"
+      reward: +0.1
+      description: "Small reward for source investigation on likely deepfakes"
+
+    - trigger: "DO_NOTHING when deepfake_probability > 0.7"
+      reward: -0.2
+      description: "Penalty for inaction on obvious deepfakes"
+
+    - trigger: "Viral spread (views > 10000)"
+      reward: -0.4
+      description: "Large penalty for uncontrolled spread"
+
+    - trigger: "Flagged after viral but before termination"
+      reward: +0.1
+      description: "Partial recovery for late-stage flagging"
+
+  normalization: "Clamp to [0.0, 1.0]: max(0.0, min(1.0, raw_reward))"
+
+# Environment interface (OpenEnv compliance)
+environment:
+  class: "DeepfakeEnv"
+  location: "env/environment.py"
+  
+  methods:
+    - name: reset
+      signature: "reset() → Observation"
+      returns: "First post observation after initialization"
+      description: "Initialize new episode with task-specific posts"
+
+    - name: step
+      signature: "step(action: Action) → (Observation, float, bool, dict)"
+      returns:
+        - observation: "Updated post state (Observation model)"
+        - reward: "Normalized reward [0.0, 1.0]"
+        - done: "Episode termination flag"
+        - info: "Metadata dict (task, step_count, viral_count, etc)"
+      description: "Advance simulation by one step"
+
+    - name: state
+      signature: "state() → dict"
+      returns: "Full environment state snapshot"
+      description: "Get serializable state with all posts and metadata"
+
+  termination_conditions:
+    - "max_steps reached (50 for Easy, 30 for Medium, 15 for Hard)"
+    - "Majority of posts viral (>50% of posts exceed 10000 views)"
+    - "All posts processed and contained"
+
+# Models (Pydantic)
+models:
+  observation:
+    class: "Observation"
+    location: "env/models.py"
+    fields_count: 7
+    validation: "Pydantic v2 validation enabled"
+
+  action:
+    class: "Action"
+    location: "env/models.py"
+    fields_count: 2
+    validation: "Pydantic v2 validation enabled"
+
+  reward:
+    class: "Reward" 
+    location: "env/models.py"
+    fields_count: 1
+    validation: "Normalized to [0.0, 1.0]"
+
+# Baseline performance
+baseline:
+  type: "Rule-Based"
+  location: "baseline.py"
+  strategy: "Priority-based action selection with post evaluation"
+  
+  results:
+    easy: 0.70
+    medium: 0.53
+    hard: 0.24
+    average: 0.49
+
+  priority_rules:
+    - priority: 1
+      condition: "deepfake_probability > 0.6"
+      action: "FLAG_POST"
+
+    - priority: 2
+      condition: "views > 5000 AND deepfake_probability > 0.4"
+      action: "TRACE_SOURCE"
+
+    - priority: 3
+      condition: "shares increase > 100 in one step"
+      action: "REDUCE_VISIBILITY"
+
+    - priority: 4
+      condition: "default fallback"
+      action: "DO_NOTHING"
+
+  tie_breaking: "Highest deepfake probability wins"
+
+# Reproducibility
+reproducibility:
+  deterministic: true
+  seed_support: true
+  seed_type: "int"
+  default_seed: 42
+  
+# Compliance
+compliance:
+  standard: "OpenEnv v1.0"
+  interface_complete: true
+  pydantic_models: true
+  type_hints: true
+  
+# Project information
+project:
+  repository: "https://github.com/yourusername/deepfake-openenv"
+  license: "MIT"
+  python_version: "3.8+"
+  submission_status: "OpenEnv Hackathon 2026"
+
+# Performance metrics
+metrics:
+  evaluation_method: "Average reward per episode"
+  num_tasks: 3
+  difficulty_progression: "Easy → Medium → Hard"
+  expected_agent_improvement: "Custom agents should exceed 0.70 baseline"
+
+# Dependencies
+dependencies:
+  - pydantic>=2.0
+  - python>=3.8
+
+# Usage example
+example_usage: |
+  from env.environment import DeepfakeEnv
+  from env.models import Action
+  
+  # Initialize
+  env = DeepfakeEnv(task="easy", seed=42)
+  observation = env.reset()
+  
+  # Step
+  action = Action(action="FLAG_POST", post_id=observation.post_id)
+  observation, reward, done, info = env.step(action)
+  
+  # State
+  state = env.state()
