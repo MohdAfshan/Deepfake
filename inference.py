@@ -4,25 +4,34 @@ from env.models import Action
 env = None
 
 
-def reset(task="easy", seed=42):
+def reset(config=None):
     global env
+
+    task = "easy"
+    seed = 42
+
+    if config:
+        task = config.get("task", "easy")
+        seed = config.get("seed", 42)
+
     env = DeepfakeEnv(task=task, seed=seed)
-    obs = env.reset()
-    return obs
+    observation = env.reset()
+
+    return observation
 
 
-def step(action_dict):
+def step(action):
     global env
 
-    action = Action(
-        action=action_dict["action"],
-        post_id=action_dict["post_id"]
+    action_obj = Action(
+        action=action["action"],
+        post_id=action["post_id"]
     )
 
-    obs, reward, done, info = env.step(action)
+    observation, reward, done, info = env.step(action_obj)
 
     return {
-        "observation": obs,
+        "observation": observation,
         "reward": reward,
         "done": done,
         "info": info
