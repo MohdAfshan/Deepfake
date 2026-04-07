@@ -30,9 +30,13 @@ class Agent:
         return observation
 
     def step(self, action):
+        if self.env is None:
+            raise RuntimeError("Environment not initialized. Call reset() first.")
+
         task_name = "step_env"
         print(f"[START] task={task_name}", flush=True)
 
+        # Create Action object; ensure types match env.models.Action
         action_obj = Action(
             action=action["action"],
             post_id=action["post_id"]
@@ -64,15 +68,3 @@ def reset(config=None):
 
 def step(action):
     return agent.step(action)
-
-
-# Optional: allow running inference.py standalone for testing
-if __name__ == "__main__":
-    # Test reset
-    obs = reset()
-    print("Reset observation:", obs, flush=True)
-
-    # Test step with dummy action
-    test_action = {"action": 0, "post_id": 0}
-    step_result = step(test_action)
-    print("Step result:", step_result, flush=True)
