@@ -1,0 +1,18 @@
+[project]
+name = "deepfake-openenv"
+version = "0.1.0"
+description = "Deepfake detection OpenEnv"
+requires-python = ">=3.9"
+
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "numpy",
+    "pandas",
+    "torch",
+    "transformers",
+    "Pillow"
+]
+
+[tool.openenv]
+entrypoint = "server:app"
